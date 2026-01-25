@@ -6,6 +6,7 @@ interface InputFieldProps {
   type: string;
   value: string | number;
   onChange: (value: string) => void;
+  onBlur?: () => void;
   icon?: React.ReactNode;
   suffix?: string;
   min?: string;
@@ -18,7 +19,7 @@ interface InputFieldProps {
 }
 
 const InputField: React.FC<InputFieldProps> = ({ 
-  label, type, value, onChange, icon, suffix, min, max, step, variant = 'default', hint, tooltip, highlight = false
+  label, type, value, onChange, onBlur, icon, suffix, min, max, step, variant = 'default', hint, tooltip, highlight = false
 }) => {
   
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -63,6 +64,7 @@ const InputField: React.FC<InputFieldProps> = ({
           type={type}
           value={value}
           onChange={handleChange}
+          onBlur={onBlur}
           min={min}
           max={max}
           step={step}

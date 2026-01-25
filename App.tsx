@@ -59,24 +59,38 @@ const App: React.FC = () => {
         try {
           const saved = JSON.parse(savedRaw);
           const defaults = getDefaults();
-          
-          // Validation Logic
           const now = new Date();
-          const savedWeeklyReset = saved.weeklyResetDate ? parseISO(saved.weeklyResetDate) : null;
           
-          let validatedState = { ...defaults, ...saved };
+          // 1. Weekly Logic: Check if Weekly Reset Date is in the past (expired)
+          const savedWeeklyReset = saved.weeklyResetDate ? parseISO(saved.weeklyResetDate) : null;
+          const isWeeklyExpired = !savedWeeklyReset || !isValid(savedWeeklyReset) || savedWeeklyReset < now;
 
-          // 1. Check if Weekly Reset Date is in the past (expired)
-          if (!savedWeeklyReset || !isValid(savedWeeklyReset) || savedWeeklyReset < now) {
-            // Weekly quota expired, reset weekly stats but keep daily prefs
-            console.log("Weekly quota expired or invalid, resetting weekly stats.");
-            validatedState.weeklyResetDate = defaults.weeklyResetDate;
-            validatedState.weeklyPercentUsed = 0;
-            validatedState.weeklySonnetPercentUsed = 0;
-            // We keep weeklyWorkDays as that is a preference
+          if (isWeeklyExpired) {
+            // Weekly quota expired: Reset weekly tracking stats, but KEEP preferences (like workDays)
+            console.log("Weekly quota expired, resetting weekly stats.");
+            saved.weeklyResetDate = defaults.weeklyResetDate; // Reset to next week
+            saved.weeklyPercentUsed = 0;
+            saved.weeklySonnetPercentUsed = 0;
+            // Note: saved.weeklyWorkDays is preserved implicitly by not overwriting it
           }
 
-          return validatedState;
+          // 2. Daily Logic: Check for stale session data
+          // If the stored data is older than 12 hours, reset the Daily Used % to 0
+          // (User is likely starting a new day/session, so old % is irrelevant)
+          if (saved._updatedAt) {
+            const lastUpdate = new Date(saved._updatedAt);
+            if (isValid(lastUpdate)) {
+               const hoursSinceUpdate = (now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60);
+               if (hoursSinceUpdate > 12) {
+                  console.log("Session stale (>12h), resetting daily percent.");
+                  saved.percentUsed = 0;
+               }
+            }
+          }
+
+          // Merge: Defaults -> Saved (with applied resets)
+          // This ensures any new fields in 'defaults' are added, while 'saved' values take precedence
+          return { ...defaults, ...saved };
         } catch (e) {
           console.error("Failed to parse saved inputs", e);
         }
@@ -95,8 +109,12 @@ const App: React.FC = () => {
   }, []);
 
   // Save State to LocalStorage whenever it changes
+  // We add a timestamp (_updatedAt) to help validity checks on reload
   useEffect(() => {
-    localStorage.setItem('quota_inputs', JSON.stringify(inputs));
+    localStorage.setItem('quota_inputs', JSON.stringify({
+      ...inputs,
+      _updatedAt: new Date().toISOString()
+    }));
   }, [inputs]);
 
   useEffect(() => {
@@ -138,10 +156,57 @@ const App: React.FC = () => {
 
   // --- Handlers ---
   const updateInput = (key: keyof QuotaState, value: string) => {
+    // Validate inputs instantaneously while typing (Upper bounds validation)
+    let validatedVal = value;
+
+    if (key === 'percentUsed' || key === 'weeklyPercentUsed' || key === 'weeklySonnetPercentUsed') {
+      const num = parseFloat(value);
+      if (!isNaN(num) && num > 100) validatedVal = '100';
+      // We allow empty string or negative (though min handles negative in input)
+    }
+
+    if (key === 'weeklyWorkDays') {
+      const num = parseFloat(value);
+      if (!isNaN(num) && num > 7) validatedVal = '7';
+    }
+
+    if (key === 'windowLengthHours') {
+      const num = parseFloat(value);
+      if (!isNaN(num) && num > 24) validatedVal = '24'; // Cap at 24h as per request
+    }
+
     setInputs(prev => ({
       ...prev,
-      [key]: value
+      [key]: validatedVal
     }));
+  };
+
+  // Validate inputs on Blur (Lower bounds / Defaulting validation)
+  const handleBlur = (key: keyof QuotaState) => {
+    setInputs(prev => {
+      let val = prev[key];
+      const num = parseFloat(val as string);
+
+      if (key === 'weeklyWorkDays') {
+        // Must be between 1 and 7. Default to 5 or 7 if empty.
+        if (isNaN(num) || num < 1) val = 1;
+        // Max checked in updateInput, but double check
+        if (num > 7) val = 7;
+      }
+
+      if (key === 'windowLengthHours') {
+        // Must be at least 0.1 hour
+        if (isNaN(num) || num <= 0) val = 5; // Default back to 5 if user clears it
+        if (num > 24) val = 24;
+      }
+
+      if (['percentUsed', 'weeklyPercentUsed', 'weeklySonnetPercentUsed'].includes(key)) {
+         if (isNaN(num) || num < 0) val = 0;
+         if (num > 100) val = 100;
+      }
+
+      return { ...prev, [key]: val };
+    });
   };
 
   const isWindowInactive = !stats.isWindowActive;
@@ -274,13 +339,23 @@ const App: React.FC = () => {
                     highlight={isWindowInactive}
                   />
                   <div className="grid grid-cols-2 gap-3">
-                    <InputField label="Used %" type="number" value={inputs.percentUsed} onChange={(v) => updateInput('percentUsed', v)} min="0" max="100" step="0.1" icon={<Percent className="w-4 h-4" />} suffix="%" />
+                    <InputField 
+                      label="Used %" 
+                      type="number" 
+                      value={inputs.percentUsed} 
+                      onChange={(v) => updateInput('percentUsed', v)} 
+                      onBlur={() => handleBlur('percentUsed')}
+                      min="0" max="100" step="0.1" 
+                      icon={<Percent className="w-4 h-4" />} suffix="%" 
+                    />
                     <InputField 
                       label="Window" 
                       type="number" 
                       value={inputs.windowLengthHours} 
                       onChange={(v) => updateInput('windowLengthHours', v)} 
-                      min="1" 
+                      onBlur={() => handleBlur('windowLengthHours')}
+                      min="0.1" 
+                      max="24"
                       step="0.5" 
                       icon={<Clock className="w-4 h-4" />} 
                       suffix="hr" 
@@ -307,12 +382,21 @@ const App: React.FC = () => {
                       tooltip="The date and time when your overall weekly usage quota resets."
                    />
                    <div className="grid grid-cols-2 gap-3">
-                      <InputField label="All Models %" type="number" value={inputs.weeklyPercentUsed} onChange={(v) => updateInput('weeklyPercentUsed', v)} min="0" max="100" step="0.1" icon={<LayoutDashboard className="w-4 h-4" />} suffix="%" />
+                      <InputField 
+                        label="All Models %" 
+                        type="number" 
+                        value={inputs.weeklyPercentUsed} 
+                        onChange={(v) => updateInput('weeklyPercentUsed', v)} 
+                        onBlur={() => handleBlur('weeklyPercentUsed')}
+                        min="0" max="100" step="0.1" 
+                        icon={<LayoutDashboard className="w-4 h-4" />} suffix="%" 
+                      />
                       <InputField 
                         label="Work Days" 
                         type="number" 
                         value={inputs.weeklyWorkDays || 7} 
                         onChange={(v) => updateInput('weeklyWorkDays', v)} 
+                        onBlur={() => handleBlur('weeklyWorkDays')}
                         min="1" 
                         max="7" 
                         step="1" 
@@ -335,6 +419,7 @@ const App: React.FC = () => {
                     type="number" 
                     value={inputs.weeklySonnetPercentUsed || 0} 
                     onChange={(v) => updateInput('weeklySonnetPercentUsed', v)} 
+                    onBlur={() => handleBlur('weeklySonnetPercentUsed')}
                     min="0" max="100" step="0.1" 
                     icon={<Percent className="w-4 h-4" />} 
                     suffix="%" 
