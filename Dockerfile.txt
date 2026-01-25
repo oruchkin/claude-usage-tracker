@@ -1,0 +1,16 @@
+# Сборка
+FROM registry.oleg.press/infra/registry/node:18-alpine as build
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+
+# Раздача
+FROM registry.oleg.press/infra/registry/nginx:alpine
+# Берем наш txt конфиг и кладем как рабочий конфиг nginx
+COPY nginx.txt /etc/nginx/conf.d/default.conf
+# ВАЖНО: Если Vite -> dist. Если Create React App -> build
+COPY --from=build /app/dist /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

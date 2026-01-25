@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# --- НАСТРОЙКИ ---
+GITLAB_REPO_URL="https://gitlab.oleg.press/react-apps/claude-usage-tracker"
+REMOTE_NAME="gitlab"
+BRANCH="main"
+
+echo "🚀 Запуск синхронизации (Force Push to GitLab)..."
+
+# 1. Проверяем remote
+if ! git remote | grep -q "^${REMOTE_NAME}$"; then
+  echo "⚙️  Добавляю gitlab remote..."
+  git remote add $REMOTE_NAME $GITLAB_REPO_URL
+fi
+
+# 2. Пушим с флагом --force (перезаписываем историю в GitLab)
+echo "📤 Отправка кода в GitLab..."
+
+# Добавили --force, чтобы решить ошибку "[rejected]"
+git push --force $REMOTE_NAME $BRANCH
+
+echo "✅ Успешно! Пайплайн в GitLab должен запуститься."

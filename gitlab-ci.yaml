@@ -1,0 +1,63 @@
+stages:
+  - build_and_push
+  - deploy_to_vps
+
+variables:
+  # === НАСТРОЙКИ ВАШЕГО ПРОЕКТА ===
+  APP_DOMAIN: "claude.oleg.press"
+  APP_NAME: "claude-usage-tracker"
+
+  # === НАСТРОЙКИ ИНФРАСТРУКТУРЫ ===
+  LETSENCRYPT_EMAIL: "oruchkin@bk.ru"
+  PROXY_NETWORK: "proxy-network"
+
+  # === НАСТРОЙКИ DOCKER (ВАЖНО ДЛЯ СБОРКИ) ===
+  # Отключаем TLS, чтобы клиент мог достучаться до демона на порту 2375
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_HOST: "tcp://docker:2375"
+  DOCKER_DRIVER: overlay2
+
+  # Системные переменные
+  IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+  LATEST_TAG: $CI_REGISTRY_IMAGE:latest
+
+# --- ЗАДАЧА 1: СБОРКА И ОТПРАВКА ---
+build_job:
+  stage: build_and_push
+  image: registry.oleg.press/infra/registry/docker:latest
+  services:
+    - name: registry.oleg.press/infra/registry/docker:dind
+      alias: docker
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
+    - docker build -f Dockerfile.txt -t $IMAGE_TAG -t $LATEST_TAG .
+    - docker push $IMAGE_TAG
+    - docker push $LATEST_TAG
+  only:
+    - main
+
+# --- ЗАДАЧА 2: ДЕПЛОЙ НА СЕРВЕР ---
+deploy_job:
+  stage: deploy_to_vps
+  image: registry.oleg.press/infra/registry/alpine:latest
+  before_script:
+    - apk add --no-cache openssh-client sshpass
+  script:
+    - echo "Deploying to VPS..."
+    # Используем | для многострочной команды
+    - |
+      sshpass -p "$VPS_PASSWORD" ssh -o StrictHostKeyChecking=no root@$VPS_IP "
+        docker login $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD &&
+        docker pull $LATEST_TAG &&
+        docker rm -f $APP_NAME || true &&
+        docker run -d \
+          --name $APP_NAME \
+          --restart always \
+          --network $PROXY_NETWORK \
+          -e VIRTUAL_HOST=$APP_DOMAIN \
+          -e LETSENCRYPT_HOST=$APP_DOMAIN \
+          -e LETSENCRYPT_EMAIL=$LETSENCRYPT_EMAIL \
+          $LATEST_TAG
+      "
+  only:
+    - main
