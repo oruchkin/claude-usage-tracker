@@ -1,0 +1,5 @@
+{
+  "name": "ClaudeUsageTracker",
+  "description": "Real-time API quota usage tracker and forecaster.",
+  "requestFramePermissions": []
+}
