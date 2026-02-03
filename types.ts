@@ -11,6 +11,9 @@ export interface QuotaState {
   
   // Sonnet Specific
   weeklySonnetPercentUsed?: number | string;
+
+  // Monthly / Billing
+  lastPaymentDate: string; // ISO date string (YYYY-MM-DD)
 }
 
 export interface CalculationResult {
@@ -32,11 +35,18 @@ export interface WeeklyCalculationResult {
   resetDate: Date;
   percentUsed: number;
   timeProgressPercent: number;
-  benchmarkPercent: number; // New field for work-day adjusted progress
+  benchmarkPercent: number;
   status: 'ok' | 'warning' | 'critical';
   daysRemaining: number;
   hoursRemaining: number;
   currentDailyPace: number;
   maxSafeDailyPace: number;
-  workDays: number; // Added for UI context
+  workDays: number;
+}
+
+export interface MonthlyCalculationResult {
+  progressPercent: number;
+  nextBillingDate: Date;
+  daysRemaining: number;
+  totalDaysInCycle: number;
 }

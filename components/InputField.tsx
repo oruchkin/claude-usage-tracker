@@ -1,3 +1,4 @@
+
 import React from 'react';
 import Tooltip from './Tooltip';
 
@@ -24,16 +25,11 @@ const InputField: React.FC<InputFieldProps> = ({
   
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value;
-    
-    // UX Fix: Only for NUMBER inputs. 
-    // If the user types a number while the value is "0" (e.g., becomes "07"),
-    // or if a leading zero persists, remove it unless it's a decimal "0."
     if (type === 'number') {
         if (val.length > 1 && val.startsWith('0') && val[1] !== '.') {
           val = val.substring(1);
         }
     }
-    
     onChange(val);
   };
 
@@ -42,12 +38,11 @@ const InputField: React.FC<InputFieldProps> = ({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <label className={`block text-sm font-medium transition-colors ${isDimmed ? 'text-gray-300 hover:text-gray-400' : 'text-gray-700'}`}>
+        <Tooltip text={tooltip || ""}>
+          <label className={`block text-sm font-medium transition-colors cursor-help ${isDimmed ? 'text-gray-300 hover:text-gray-400' : 'text-gray-700 hover:text-indigo-600'}`}>
             {label}
           </label>
-          {tooltip && <Tooltip text={tooltip} />}
-        </div>
+        </Tooltip>
         {hint && (
           <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
             {hint}
