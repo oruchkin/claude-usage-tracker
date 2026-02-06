@@ -1,3 +1,4 @@
+
 export interface QuotaState {
   // Daily / Short-term
   resetTime: string;
@@ -11,6 +12,7 @@ export interface QuotaState {
   
   // Sonnet Specific
   weeklySonnetPercentUsed?: number | string;
+  weeklySonnetResetDate?: string; // ISO string for datetime-local
 
   // Monthly / Billing
   lastPaymentDate: string; // ISO date string (YYYY-MM-DD)
